@@ -34,8 +34,8 @@ import {
   type LegacyDetectionResult,
 } from './legacy-cleanup.js';
 import { isInteractive } from '../utils/interactive.js';
-import { getGlobalConfig, type Delivery, type Profile } from './global-config.js';
-import { getProfileWorkflows, ALL_WORKFLOWS } from './profiles.js';
+import type { Delivery, Profile } from './global-config.js';
+import { ALL_WORKFLOWS } from './profiles.js';
 import { getAvailableTools } from './available-tools.js';
 import {
   WORKFLOW_TO_SKILL_DIR,
@@ -43,6 +43,11 @@ import {
   getConfiguredToolsForProfileSync,
   getToolsNeedingProfileSync,
 } from './profile-sync-drift.js';
+import { readProjectConfig } from './project-config.js';
+import {
+  resolveEffectiveProfileSettings,
+  type ConfigScope,
+} from './profile-resolution.js';
 import {
   scanInstalledWorkflows as scanInstalledWorkflowsShared,
   migrateIfNeeded as migrateIfNeededShared,
@@ -58,6 +63,8 @@ const OLD_CORE_WORKFLOWS = ['propose', 'explore', 'apply', 'archive'] as const;
 export interface UpdateCommandOptions {
   /** Force update even when tools are up to date */
   force?: boolean;
+  /** Optional config-scope override for effective profile resolution */
+  scope?: ConfigScope;
 }
 
 /**
@@ -75,9 +82,11 @@ export function scanInstalledWorkflows(projectPath: string, toolIds: string[]): 
 
 export class UpdateCommand {
   private readonly force: boolean;
+  private readonly scope?: ConfigScope;
 
   constructor(options: UpdateCommandOptions = {}) {
     this.force = options.force ?? false;
+    this.scope = options.scope;
   }
 
   async execute(projectPath: string): Promise<void> {
@@ -94,12 +103,13 @@ export class UpdateCommand {
     const detectedTools = getAvailableTools(resolvedProjectPath);
     migrateIfNeededShared(resolvedProjectPath, detectedTools);
 
-    // 3. Read global config for profile/delivery
-    const globalConfig = getGlobalConfig();
-    const profile = globalConfig.profile ?? 'core';
-    const delivery: Delivery = globalConfig.delivery ?? 'both';
-    const profileWorkflows = getProfileWorkflows(profile, globalConfig.workflows);
-    const desiredWorkflows = profileWorkflows.filter((workflow): workflow is (typeof ALL_WORKFLOWS)[number] =>
+    // 3. Resolve effective profile/delivery/workflows by scope-aware precedence
+    const effective = resolveEffectiveProfileSettings({
+      scopeOverride: this.scope,
+      projectConfig: readProjectConfig(resolvedProjectPath),
+    });
+    const delivery: Delivery = effective.delivery;
+    const desiredWorkflows = effective.workflows.filter((workflow): workflow is (typeof ALL_WORKFLOWS)[number] =>
       (ALL_WORKFLOWS as readonly string[]).includes(workflow)
     );
     const shouldGenerateSkills = delivery !== 'commands';
@@ -156,7 +166,7 @@ export class UpdateCommand {
       // Still check for new tool directories and extra workflows
       this.detectNewTools(resolvedProjectPath, configuredTools);
       this.displayExtraWorkflowsNote(resolvedProjectPath, configuredTools, desiredWorkflows);
-      this.displayOldCoreCustomProfileNote(profile, globalConfig.workflows);
+      this.displayOldCoreCustomProfileNote(effective.profile, effective.workflows);
       return;
     }
 
@@ -284,7 +294,7 @@ export class UpdateCommand {
 
     // 14. Display note about extra workflows not in profile
     this.displayExtraWorkflowsNote(resolvedProjectPath, configuredAndNewTools, desiredWorkflows);
-    this.displayOldCoreCustomProfileNote(profile, globalConfig.workflows);
+    this.displayOldCoreCustomProfileNote(effective.profile, effective.workflows);
 
     // 15. List affected tools
     if (updatedTools.length > 0) {
