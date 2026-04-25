@@ -108,7 +108,6 @@ export class UpdateCommand {
       scopeOverride: this.scope,
       projectConfig: readProjectConfig(resolvedProjectPath),
     });
-    const profile = effective.profile;
     const delivery: Delivery = effective.delivery;
     const desiredWorkflows = effective.workflows.filter((workflow): workflow is (typeof ALL_WORKFLOWS)[number] =>
       (ALL_WORKFLOWS as readonly string[]).includes(workflow)
