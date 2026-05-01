@@ -1492,7 +1492,7 @@ workflows:
       )).toBe(false);
     });
 
-    it('should ignore project profile settings when scope override is user', async () => {
+    it('should ignore project profile settings when scope override is global', async () => {
       setMockConfig({
         featureFlags: {},
         profile: 'core',
@@ -1512,7 +1512,7 @@ workflows:
       await fs.mkdir(path.join(skillsDir, 'openspec-explore'), { recursive: true });
       await fs.writeFile(path.join(skillsDir, 'openspec-explore', 'SKILL.md'), 'old');
 
-      const scopedUpdateCommand = new UpdateCommand({ scope: 'user' });
+      const scopedUpdateCommand = new UpdateCommand({ scope: 'global' });
       await scopedUpdateCommand.execute(testDir);
 
       expect(await FileSystemUtils.fileExists(
@@ -1555,6 +1555,41 @@ workflows:
       const commandsDir = path.join(testDir, '.claude', 'commands', 'opsx');
       expect(await FileSystemUtils.fileExists(path.join(commandsDir, 'explore.md'))).toBe(true);
       expect(await FileSystemUtils.fileExists(path.join(commandsDir, 'verify.md'))).toBe(false);
+    });
+
+    it('should suggest core preset when custom profile preserves the old core workflow set', async () => {
+      setMockConfig({
+        featureFlags: {},
+        profile: 'custom',
+        delivery: 'both',
+        workflows: ['propose', 'explore', 'apply', 'archive'],
+      });
+
+      const initCommand = new InitCommand({ tools: 'claude', force: true });
+      await initCommand.execute(testDir);
+
+      const consoleSpy = vi.spyOn(console, 'log');
+
+      await updateCommand.execute(testDir);
+
+      const calls = consoleSpy.mock.calls.map(call =>
+        call.map(arg => String(arg)).join(' ')
+      );
+      expect(calls.some(call =>
+        call.includes('The core profile now includes sync')
+      )).toBe(true);
+      expect(calls.some(call =>
+        call.includes('openspec config profile core') && call.includes('openspec update')
+      )).toBe(true);
+
+      expect(await FileSystemUtils.fileExists(
+        path.join(testDir, '.claude', 'skills', 'openspec-sync-specs', 'SKILL.md')
+      )).toBe(false);
+      expect(await FileSystemUtils.fileExists(
+        path.join(testDir, '.claude', 'commands', 'opsx', 'sync.md')
+      )).toBe(false);
+
+      consoleSpy.mockRestore();
     });
 
     it('should respect skills-only delivery setting', async () => {
