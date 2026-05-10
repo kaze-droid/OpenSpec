@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from 'fs';
 import path from 'path';
 import { parse as parseYaml } from 'yaml';
 import { z } from 'zod';
+import { OPENSPEC_DIR_NAME } from './config.js';
 
 /**
  * Zod schema for project configuration.
@@ -67,8 +68,38 @@ export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
 export type ProjectProfileConfig = Pick<ProjectConfig, 'profile' | 'delivery' | 'workflows'>;
 
 const MAX_CONTEXT_SIZE = 50 * 1024; // 50KB hard limit
-const AMBIGUOUS_PROJECT_CONFIG_ERROR =
+export const AMBIGUOUS_PROJECT_CONFIG_ERROR =
   'Both openspec/config.yaml and openspec/config.yml exist. Remove one to continue.';
+
+export interface ResolvedProjectConfigPath {
+  path: string;
+  exists: boolean;
+}
+
+/**
+ * Resolve the active project config path, preserving an existing filename.
+ * Defaults new writes to openspec/config.yaml when neither file exists.
+ */
+export function resolveProjectConfigPath(projectRoot: string): ResolvedProjectConfigPath {
+  const yamlPath = path.join(projectRoot, OPENSPEC_DIR_NAME, 'config.yaml');
+  const ymlPath = path.join(projectRoot, OPENSPEC_DIR_NAME, 'config.yml');
+  const yamlExists = existsSync(yamlPath);
+  const ymlExists = existsSync(ymlPath);
+
+  if (yamlExists && ymlExists) {
+    throw new Error(AMBIGUOUS_PROJECT_CONFIG_ERROR);
+  }
+
+  if (yamlExists) {
+    return { path: yamlPath, exists: true };
+  }
+
+  if (ymlExists) {
+    return { path: ymlPath, exists: true };
+  }
+
+  return { path: yamlPath, exists: false };
+}
 
 /**
  * Read and parse openspec/config.yaml or openspec/config.yml from project root.
@@ -90,19 +121,12 @@ const AMBIGUOUS_PROJECT_CONFIG_ERROR =
  * @returns Parsed config or null if file doesn't exist
  */
 export function readProjectConfig(projectRoot: string): Partial<ProjectConfig> | null {
-  const yamlPath = path.join(projectRoot, 'openspec', 'config.yaml');
-  const ymlPath = path.join(projectRoot, 'openspec', 'config.yml');
-  const yamlExists = existsSync(yamlPath);
-  const ymlExists = existsSync(ymlPath);
-
-  if (yamlExists && ymlExists) {
-    throw new Error(AMBIGUOUS_PROJECT_CONFIG_ERROR);
-  }
-
-  const configPath = yamlExists ? yamlPath : ymlExists ? ymlPath : null;
-  if (!configPath) {
+  const resolved = resolveProjectConfigPath(projectRoot);
+  if (!resolved.exists) {
     return null;
   }
+
+  const configPath = resolved.path;
   const configDisplayPath = `openspec/${path.basename(configPath)}`;
 
   try {
@@ -296,7 +320,9 @@ export function suggestSchemas(
   const builtIn = availableSchemas.filter((s) => s.isBuiltIn).map((s) => s.name);
   const projectLocal = availableSchemas.filter((s) => !s.isBuiltIn).map((s) => s.name);
 
-  let message = `Schema '${invalidSchemaName}' not found in openspec/config.yaml\n\n`;
+  let message =
+    `Schema '${invalidSchemaName}' not found in project config ` +
+    `(openspec/config.yaml or existing openspec/config.yml)\n\n`;
 
   if (suggestions.length > 0) {
     message += `Did you mean one of these?\n`;
@@ -317,7 +343,9 @@ export function suggestSchemas(
     message += `  Project-local: (none found)\n`;
   }
 
-  message += `\nFix: Edit openspec/config.yaml and change 'schema: ${invalidSchemaName}' to a valid schema name`;
+  message +=
+    `\nFix: Edit the project config file and change ` +
+    `'schema: ${invalidSchemaName}' to a valid schema name`;
 
   return message;
 }

@@ -12,7 +12,7 @@ OpenSpec provides three levels of customization:
 
 ## Project Configuration
 
-The `openspec/config.yaml` file is the easiest way to customize OpenSpec for your team. It lets you:
+The `openspec/config.yaml` file, or an existing `openspec/config.yml`, is the easiest way to customize OpenSpec for your team. It lets you:
 
 - **Set a default schema** - Skip `--schema` on every command
 - **Inject project context** - AI sees your tech stack, conventions, etc.
@@ -58,6 +58,10 @@ rules:
 
 `workflows` is applied only when `profile: custom`. If `profile: core`, OpenSpec always uses the core workflow set.
 
+If project config sets `profile: custom`, it must also set project `workflows`. OpenSpec will not silently inherit workflows from a developer's global config for that case, because that would make shared repo behavior non-deterministic.
+
+OpenSpec preserves `openspec/config.yml` when that is the file already present in a repo, and defaults new writes to `openspec/config.yaml` when neither filename exists. If both files exist at once, project-scoped config commands and `openspec update` fail until you remove one.
+
 ### How It Works
 
 **Default schema:**
@@ -102,7 +106,11 @@ For profile-driven behavior (for example `openspec update`), OpenSpec resolves s
 3. Global config (`openspec config ...`)
 4. Defaults (`profile: core`, `delivery: both`, profile-derived workflows)
 
-This is key-by-key fallback, so partial project settings are valid. Example: if project config only sets `profile`, `delivery` can still come from global config.
+This is key-by-key fallback, so partial project settings are valid. Example: if project config only sets `delivery`, the active profile can still come from global config.
+
+One exception is `profile: custom` in project config: project `workflows` must also be present. If they are missing, profile-driven commands such as `openspec update`, `openspec config --scope project list`, and `openspec config --scope project profile` fail with an actionable error instead of inheriting global workflows.
+
+If you need to ignore project overrides for a run, use `openspec update --scope global`. If you need to repair the project config, write the missing workflows with `openspec config --scope project set workflows '["explore"]'` (replace the array with your project's workflow list).
 
 ### Schema Resolution Order
 
@@ -110,7 +118,7 @@ When OpenSpec needs a schema, it checks in this order:
 
 1. CLI flag: `--schema <name>`
 2. Change metadata (`.openspec.yaml` in the change folder)
-3. Project config (`openspec/config.yaml`)
+3. Project config (`openspec/config.yaml` or existing `openspec/config.yml`)
 4. Default (`spec-driven`)
 
 ---

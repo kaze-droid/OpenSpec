@@ -434,7 +434,7 @@ program
   .command('status')
   .description('Display artifact completion status for a change')
   .option('--change <id>', 'Change name to show status for')
-  .option('--schema <name>', 'Schema override (auto-detected from config.yaml)')
+  .option('--schema <name>', 'Schema override (auto-detected from project config)')
   .option('--json', 'Output as JSON')
   .action(async (options: StatusOptions) => {
     try {
@@ -451,7 +451,7 @@ program
   .command('instructions [artifact]')
   .description('Output enriched instructions for creating an artifact or applying tasks')
   .option('--change <id>', 'Change name')
-  .option('--schema <name>', 'Schema override (auto-detected from config.yaml)')
+  .option('--schema <name>', 'Schema override (auto-detected from project config)')
   .option('--json', 'Output as JSON')
   .action(async (artifactId: string | undefined, options: InstructionsOptions) => {
     try {

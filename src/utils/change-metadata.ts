@@ -152,7 +152,7 @@ export function readChangeMetadata(
  * Resolution order:
  * 1. Explicit schema (if provided)
  * 2. Schema from .openspec.yaml metadata (if exists)
- * 3. Schema from openspec/config.yaml (if exists)
+ * 3. Schema from project config (if present)
  * 4. Default 'spec-driven'
  *
  * @param changeDir - The path to the change directory

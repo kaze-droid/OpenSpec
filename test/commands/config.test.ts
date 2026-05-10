@@ -154,6 +154,17 @@ describe('config command project scope', () => {
     expect(consoleLogSpy).toHaveBeenCalledWith('custom');
   });
 
+  it('path --scope project preserves an existing config.yml filename', async () => {
+    fs.mkdirSync(path.join(tempDir, 'openspec'), { recursive: true });
+    fs.writeFileSync(path.join(tempDir, 'openspec', 'config.yml'), 'schema: spec-driven\n', 'utf-8');
+
+    await runConfigCommand(['--scope', 'project', 'path']);
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      fs.realpathSync(path.join(tempDir, 'openspec', 'config.yml'))
+    );
+  });
+
   it('list --scope project --json includes raw and effective sections', async () => {
     const { saveGlobalConfig } = await import('../../src/core/global-config.js');
 
@@ -207,6 +218,25 @@ workflows:
     });
   });
 
+  it('list --scope project fails gracefully when project custom profile omits workflows', async () => {
+    fs.mkdirSync(path.join(tempDir, 'openspec'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, 'openspec', 'config.yml'),
+      `schema: spec-driven
+profile: custom
+`
+    );
+
+    await expect(runConfigCommand(['--scope', 'project', 'list'])).resolves.toBeUndefined();
+
+    expect(process.exitCode).toBe(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Project config sets profile: custom but does not define workflows'
+      )
+    );
+  });
+
   it('project-scoped writes preserve existing schema/context/rules fields', async () => {
     fs.mkdirSync(path.join(tempDir, 'openspec'), { recursive: true });
     fs.writeFileSync(
@@ -231,6 +261,28 @@ rules:
       delivery: 'commands',
     });
     expect(parsed.rules).toEqual({ proposal: ['Keep this'] });
+  });
+
+  it('project-scoped writes update an existing config.yml file instead of creating config.yaml', async () => {
+    fs.mkdirSync(path.join(tempDir, 'openspec'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, 'openspec', 'config.yml'),
+      `schema: spec-driven
+delivery: both
+`
+    );
+
+    await runConfigCommand(['--scope', 'project', 'set', 'profile', 'custom']);
+
+    expect(fs.existsSync(path.join(tempDir, 'openspec', 'config.yaml'))).toBe(false);
+    const parsed = parseYaml(
+      fs.readFileSync(path.join(tempDir, 'openspec', 'config.yml'), 'utf-8')
+    ) as Record<string, unknown>;
+    expect(parsed).toMatchObject({
+      schema: 'spec-driven',
+      delivery: 'both',
+      profile: 'custom',
+    });
   });
 
   it('project-scoped set preserves YAML comments and key order', async () => {
@@ -301,6 +353,29 @@ delivery: both
     expect(written).toContain('delivery: both');
   });
 
+  it('project-scoped unset updates an existing config.yml file instead of creating config.yaml', async () => {
+    fs.mkdirSync(path.join(tempDir, 'openspec'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, 'openspec', 'config.yml'),
+      `schema: spec-driven
+profile: custom
+workflows:
+  - explore
+`
+    );
+
+    await runConfigCommand(['--scope', 'project', 'unset', 'profile']);
+
+    expect(fs.existsSync(path.join(tempDir, 'openspec', 'config.yaml'))).toBe(false);
+    const parsed = parseYaml(
+      fs.readFileSync(path.join(tempDir, 'openspec', 'config.yml'), 'utf-8')
+    ) as Record<string, unknown>;
+    expect(parsed).toEqual({
+      schema: 'spec-driven',
+      workflows: ['explore'],
+    });
+  });
+
   it('rejects unsupported project-scoped keys', async () => {
     await runConfigCommand(['--scope', 'project', 'set', 'schema', 'spec-driven']);
 
@@ -328,6 +403,28 @@ delivery: both
       fs.readFileSync(path.join(tempDir, 'openspec', 'config.yaml'), 'utf-8')
     ) as Record<string, unknown>;
     expect(parsed.workflows).toEqual(['propose', 'explore']);
+  });
+
+  it('project-scoped set workflows remains usable to repair custom project config', async () => {
+    fs.mkdirSync(path.join(tempDir, 'openspec'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, 'openspec', 'config.yaml'),
+      `schema: spec-driven
+profile: custom
+`
+    );
+
+    await runConfigCommand(['--scope', 'project', 'set', 'workflows', '["explore"]']);
+
+    expect(process.exitCode).toBeUndefined();
+    const parsed = parseYaml(
+      fs.readFileSync(path.join(tempDir, 'openspec', 'config.yaml'), 'utf-8')
+    ) as Record<string, unknown>;
+    expect(parsed).toMatchObject({
+      schema: 'spec-driven',
+      profile: 'custom',
+      workflows: ['explore'],
+    });
   });
 
   it('project scope get honors --allow-unknown for unknown keys', async () => {
@@ -413,25 +510,20 @@ delivery: both
     );
   });
 
-  it('builds project config paths for windows-style roots without duplicated separators', async () => {
-    const { getProjectConfigFilePaths } = await import('../../src/commands/config.js');
+  it('shared project config resolver builds default config.yaml path without duplicated separators', async () => {
+    const { resolveProjectConfigPath } = await import('../../src/core/project-config.js');
 
     const windowsLikeRootWithTrailingSlash = 'C:\\repo\\sample-project/';
-    const paths = getProjectConfigFilePaths(windowsLikeRootWithTrailingSlash);
+    const resolved = resolveProjectConfigPath(windowsLikeRootWithTrailingSlash);
 
     const expectedYamlPath =
       process.platform === 'win32'
         ? 'C:\\repo\\sample-project\\openspec\\config.yaml'
         : 'C:\\repo\\sample-project/openspec/config.yaml';
-    const expectedYmlPath =
-      process.platform === 'win32'
-        ? 'C:\\repo\\sample-project\\openspec\\config.yml'
-        : 'C:\\repo\\sample-project/openspec/config.yml';
 
-    expect(paths.yamlPath).toBe(expectedYamlPath);
-    expect(paths.ymlPath).toBe(expectedYmlPath);
-    expect(paths.yamlPath).not.toContain('//openspec');
-    expect(paths.ymlPath).not.toContain('//openspec');
+    expect(resolved.path).toBe(expectedYamlPath);
+    expect(resolved.exists).toBe(false);
+    expect(resolved.path).not.toContain('//openspec');
   });
 });
 

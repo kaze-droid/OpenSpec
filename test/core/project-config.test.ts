@@ -3,7 +3,9 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 import {
+  AMBIGUOUS_PROJECT_CONFIG_ERROR,
   readProjectConfig,
+  resolveProjectConfigPath,
   validateConfigRules,
   suggestSchemas,
 } from '../../src/core/project-config.js';
@@ -467,6 +469,41 @@ context: |
     });
 
     describe('.yml/.yaml precedence', () => {
+      it('should default new project config writes to config.yaml when no file exists', () => {
+        const resolved = resolveProjectConfigPath(tempDir);
+
+        expect(resolved).toEqual({
+          path: path.join(tempDir, 'openspec', 'config.yaml'),
+          exists: false,
+        });
+      });
+
+      it('should resolve an existing config.yaml file', () => {
+        const configDir = path.join(tempDir, 'openspec');
+        fs.mkdirSync(configDir, { recursive: true });
+        fs.writeFileSync(path.join(configDir, 'config.yaml'), 'schema: spec-driven\n');
+
+        const resolved = resolveProjectConfigPath(tempDir);
+
+        expect(resolved).toEqual({
+          path: path.join(configDir, 'config.yaml'),
+          exists: true,
+        });
+      });
+
+      it('should resolve an existing config.yml file', () => {
+        const configDir = path.join(tempDir, 'openspec');
+        fs.mkdirSync(configDir, { recursive: true });
+        fs.writeFileSync(path.join(configDir, 'config.yml'), 'schema: spec-driven\n');
+
+        const resolved = resolveProjectConfigPath(tempDir);
+
+        expect(resolved).toEqual({
+          path: path.join(configDir, 'config.yml'),
+          exists: true,
+        });
+      });
+
       it('should fail when both .yaml and .yml exist', () => {
         const configDir = path.join(tempDir, 'openspec');
         fs.mkdirSync(configDir, { recursive: true });
@@ -479,9 +516,8 @@ context: |
           'schema: custom-schema\ncontext: from yml\n'
         );
 
-        expect(() => readProjectConfig(tempDir)).toThrow(
-          'Both openspec/config.yaml and openspec/config.yml exist'
-        );
+        expect(() => resolveProjectConfigPath(tempDir)).toThrow(AMBIGUOUS_PROJECT_CONFIG_ERROR);
+        expect(() => readProjectConfig(tempDir)).toThrow(AMBIGUOUS_PROJECT_CONFIG_ERROR);
       });
 
       it('should use .yml when .yaml does not exist', () => {
@@ -669,7 +705,9 @@ rules:
     it('should suggest close matches using fuzzy matching', () => {
       const message = suggestSchemas('spec-drven', availableSchemas); // Missing 'i'
 
-      expect(message).toContain("Schema 'spec-drven' not found");
+      expect(message).toContain(
+        "Schema 'spec-drven' not found in project config (openspec/config.yaml or existing openspec/config.yml)"
+      );
       expect(message).toContain('Did you mean one of these?');
       expect(message).toContain('spec-driven (built-in)');
     });
@@ -703,7 +741,7 @@ rules:
       const message = suggestSchemas('wrong-schema', availableSchemas);
 
       expect(message).toContain(
-        "Fix: Edit openspec/config.yaml and change 'schema: wrong-schema' to a valid schema name"
+        "Fix: Edit the project config file and change 'schema: wrong-schema' to a valid schema name"
       );
     });
 

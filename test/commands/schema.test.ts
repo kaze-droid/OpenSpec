@@ -2,6 +2,14 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { Command } from 'commander';
+
+async function runSchemaCommand(args: string[]): Promise<void> {
+  const { registerSchemaCommand } = await import('../../src/commands/schema.js');
+  const program = new Command();
+  registerSchemaCommand(program);
+  await program.parseAsync(['node', 'openspec', 'schema', ...args]);
+}
 
 describe('schema command', () => {
   let tempDir: string;
@@ -35,6 +43,8 @@ describe('schema command', () => {
     // Spy on console
     consoleLogSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
     consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    process.exitCode = undefined;
   });
 
   afterEach(() => {
@@ -51,6 +61,8 @@ describe('schema command', () => {
 
     // Reset module cache
     vi.resetModules();
+
+    process.exitCode = undefined;
   });
 
   describe('schema which', () => {
@@ -320,6 +332,86 @@ artifacts:
       expect(schema.artifacts[1].requires).toEqual(['proposal']);
       expect(schema.artifacts[2].requires).toEqual(['specs']);
       expect(schema.artifacts[3].requires).toEqual(['design']);
+    });
+
+    it('should update an existing config.yml without creating config.yaml when set as default', async () => {
+      fs.mkdirSync(path.join(tempDir, 'openspec'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tempDir, 'openspec', 'config.yml'),
+        'schema: spec-driven\n',
+        'utf-8'
+      );
+
+      await runSchemaCommand([
+        'init',
+        'my-workflow',
+        '--default',
+        '--description',
+        'Test schema',
+        '--artifacts',
+        'proposal',
+      ]);
+
+      expect(fs.existsSync(path.join(tempDir, 'openspec', 'config.yaml'))).toBe(false);
+
+      const { parse } = await import('yaml');
+      const parsed = parse(
+        fs.readFileSync(path.join(tempDir, 'openspec', 'config.yml'), 'utf-8')
+      ) as Record<string, unknown>;
+
+      expect(parsed.schema).toBe('my-workflow');
+    });
+
+    it('should create openspec/config.yaml when no project config exists and set as default', async () => {
+      await runSchemaCommand([
+        'init',
+        'my-workflow',
+        '--default',
+        '--description',
+        'Test schema',
+        '--artifacts',
+        'proposal',
+      ]);
+
+      expect(fs.existsSync(path.join(tempDir, 'openspec', 'config.yaml'))).toBe(true);
+
+      const { parse } = await import('yaml');
+      const parsed = parse(
+        fs.readFileSync(path.join(tempDir, 'openspec', 'config.yaml'), 'utf-8')
+      ) as Record<string, unknown>;
+
+      expect(parsed.schema).toBe('my-workflow');
+    });
+
+    it('should fail when both config.yaml and config.yml exist and set as default is requested', async () => {
+      fs.mkdirSync(path.join(tempDir, 'openspec'), { recursive: true });
+      fs.writeFileSync(
+        path.join(tempDir, 'openspec', 'config.yaml'),
+        'schema: spec-driven\n',
+        'utf-8'
+      );
+      fs.writeFileSync(
+        path.join(tempDir, 'openspec', 'config.yml'),
+        'schema: spec-driven\n',
+        'utf-8'
+      );
+
+      await runSchemaCommand([
+        'init',
+        'my-workflow',
+        '--default',
+        '--description',
+        'Test schema',
+        '--artifacts',
+        'proposal',
+      ]);
+
+      expect(process.exitCode).toBe(1);
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        expect.stringContaining(
+          'Both openspec/config.yaml and openspec/config.yml exist. Remove one to continue.'
+        )
+      );
     });
   });
 

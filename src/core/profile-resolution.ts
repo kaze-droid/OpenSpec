@@ -55,7 +55,7 @@ export interface ResolveEffectiveProfileSettingsOptions {
   scopeOverride?: ConfigScope;
   /** Optional direct CLI overrides for profile keys. */
   cliOverrides?: ProjectProfileConfig;
-  /** Optional project config values (usually read from openspec/config.yaml). */
+  /** Optional project config values (usually read from the project config file). */
   projectConfig?: ProjectProfileConfig | null;
   /** Optional preloaded global config (defaults to getGlobalConfig()). */
   globalConfig?: GlobalConfig;
@@ -75,15 +75,31 @@ export interface EffectiveProfileSettings {
   };
 }
 
+function assertProjectCustomWorkflowsExplicit(options: ResolveEffectiveProfileSettingsOptions): void {
+  if (options.scopeOverride === 'global') {
+    return;
+  }
+
+  if (options.projectConfig?.profile === 'custom' && options.projectConfig.workflows === undefined) {
+    throw new Error(
+      'Project config sets profile: custom but does not define workflows. Add workflows to your project config file, or remove the project profile override.'
+    );
+  }
+}
+
 /**
  * Resolve effective profile settings with deterministic precedence:
  * CLI override > project config > global config > defaults.
  *
- * Resolution is key-by-key to support partial project config fallback.
+ * Resolution is key-by-key to support partial project config fallback,
+ * except that a project-scoped `profile: custom` must define project
+ * `workflows` explicitly.
  */
 export function resolveEffectiveProfileSettings(
   options: ResolveEffectiveProfileSettingsOptions = {}
 ): EffectiveProfileSettings {
+  assertProjectCustomWorkflowsExplicit(options);
+
   const globalConfig = options.globalConfig ?? getGlobalConfig();
   const projectConfig = options.projectConfig ?? null;
   const cli = options.cliOverrides ?? {};

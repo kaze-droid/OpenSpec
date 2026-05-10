@@ -175,6 +175,10 @@ openspec update --scope global
 openspec update --scope project
 ```
 
+If project config sets `profile: custom`, it must also define project `workflows`. Plain `openspec update` and `openspec update --scope project` will fail rather than inherit a developer's global workflows. Use `openspec update --scope global` to ignore project overrides for a run.
+
+If both `openspec/config.yaml` and `openspec/config.yml` exist, `openspec update` fails with an explicit error instead of picking one implicitly. Remove one file to continue.
+
 ---
 
 ## Workspace Commands
@@ -912,8 +916,12 @@ spec-driven resolves from: package
 
 View and modify OpenSpec configuration.
 
-Default scope is `global`. Use `--scope project` to read/write project-scoped profile settings (`profile`, `delivery`, `workflows`) in `openspec/config.yaml` (or existing `config.yml`).
+Default scope is `global`. Use `--scope project` to read/write project-scoped profile settings (`profile`, `delivery`, `workflows`) in `openspec/config.yaml` (or an existing `config.yml`).
 If you already use global-only config, no migration is required: existing commands keep global behavior unless you explicitly opt into `--scope project`.
+
+Project-scoped writes preserve the existing filename when the repo already uses `openspec/config.yml`, and default to creating `openspec/config.yaml` when neither file exists. If both files exist, project-scoped config commands fail until one file is removed.
+
+If project config sets `profile: custom`, it must also define project `workflows`. Project-scoped commands that show effective settings, such as `list` and the interactive `profile` wizard, will fail until the workflows are added. Raw write commands such as `openspec config --scope project set workflows ...` still work so you can repair the config.
 
 ```
 openspec config <subcommand> [options]
@@ -967,6 +975,9 @@ openspec config profile core
 
 # Set project-scoped profile override
 openspec config --scope project set profile custom
+
+# Repair a project-scoped custom profile by setting workflows explicitly
+openspec config --scope project set workflows '["explore", "verify"]'
 
 # Read project-scoped profile key
 openspec config --scope project get profile

@@ -23,7 +23,7 @@ import {
 import { CORE_WORKFLOWS, ALL_WORKFLOWS, getProfileWorkflows } from '../core/profiles.js';
 import { OPENSPEC_DIR_NAME } from '../core/config.js';
 import { hasProjectConfigDrift } from '../core/profile-sync-drift.js';
-import { readProjectConfig } from '../core/project-config.js';
+import { readProjectConfig, resolveProjectConfigPath } from '../core/project-config.js';
 import {
   resolveEffectiveProfileSettings,
   type ConfigScope,
@@ -104,49 +104,13 @@ const WORKFLOW_PROMPT_META: Record<string, WorkflowPromptMeta> = {
 
 const DEFAULT_PROJECT_SCHEMA = 'spec-driven';
 const PROJECT_PROFILE_KEYS = new Set(['profile', 'delivery', 'workflows']);
-const AMBIGUOUS_PROJECT_CONFIG_ERROR =
-  'Both openspec/config.yaml and openspec/config.yml exist. Remove one to continue.';
-
-/**
- * Return candidate project config paths for both supported YAML extensions.
- *
- * Callers can use this to implement existence checks, ambiguity handling,
- * and default path selection for new files.
- */
-export function getProjectConfigFilePaths(projectDir: string): {
-  yamlPath: string;
-  ymlPath: string;
-} {
-  return {
-    yamlPath: path.join(projectDir, OPENSPEC_DIR_NAME, 'config.yaml'),
-    ymlPath: path.join(projectDir, OPENSPEC_DIR_NAME, 'config.yml'),
-  };
-}
-
-function resolveProjectConfigFilePath(projectDir: string): { path: string; exists: boolean } {
-  const { yamlPath, ymlPath } = getProjectConfigFilePaths(projectDir);
-  const yamlExists = fs.existsSync(yamlPath);
-  const ymlExists = fs.existsSync(ymlPath);
-
-  if (yamlExists && ymlExists) {
-    throw new Error(AMBIGUOUS_PROJECT_CONFIG_ERROR);
-  }
-
-  if (yamlExists) {
-    return { path: yamlPath, exists: true };
-  }
-  if (ymlExists) {
-    return { path: ymlPath, exists: true };
-  }
-  return { path: yamlPath, exists: false };
-}
 
 function isObjectRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function readRawProjectConfigFile(projectDir: string): ProjectConfigFile {
-  const resolved = resolveProjectConfigFilePath(projectDir);
+  const resolved = resolveProjectConfigPath(projectDir);
 
   if (!resolved.exists) {
     return {
@@ -488,7 +452,7 @@ export function registerConfigCommand(program: Command): void {
       }
 
       try {
-        console.log(resolveProjectConfigFilePath(process.cwd()).path);
+        console.log(resolveProjectConfigPath(process.cwd()).path);
       } catch (error) {
         console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
         process.exitCode = 1;
@@ -548,19 +512,19 @@ export function registerConfigCommand(program: Command): void {
 
       let projectFile: ProjectConfigFile;
       let projectConfig: NonNullable<ReturnType<typeof readProjectConfig>>;
+      let effective: ReturnType<typeof resolveEffectiveProfileSettings>;
       try {
         projectFile = readRawProjectConfigFile(projectDir);
         projectConfig = readProjectConfig(projectDir) ?? {};
+        effective = resolveEffectiveProfileSettings({
+          projectConfig,
+          globalConfig: getGlobalConfig(),
+        });
       } catch (error) {
         console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
         process.exitCode = 1;
         return;
       }
-
-      const effective = resolveEffectiveProfileSettings({
-        projectConfig,
-        globalConfig: getGlobalConfig(),
-      });
 
       if (options.json) {
         console.log(
@@ -984,7 +948,7 @@ export function registerConfigCommand(program: Command): void {
         let projectConfig: NonNullable<ReturnType<typeof readProjectConfig>> | null = null;
 
         if (scope === 'project') {
-          const resolvedProjectConfigPath = resolveProjectConfigFilePath(projectDir);
+          const resolvedProjectConfigPath = resolveProjectConfigPath(projectDir);
           hasProjectConfig = resolvedProjectConfigPath.exists;
           projectConfig = readProjectConfig(projectDir) ?? {};
         }

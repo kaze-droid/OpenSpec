@@ -1622,7 +1622,92 @@ workflows:
       )).toBe(false);
     });
 
-    it('should ignore project profile settings when scope override is global', async () => {
+    it('should read project profile settings from config.yml by default', async () => {
+      setMockConfig({
+        featureFlags: {},
+        profile: 'core',
+        delivery: 'both',
+      });
+
+      await fs.writeFile(
+        path.join(testDir, 'openspec', 'config.yml'),
+        `schema: spec-driven
+profile: custom
+workflows:
+  - explore
+`
+      );
+
+      const skillsDir = path.join(testDir, '.claude', 'skills');
+      await fs.mkdir(path.join(skillsDir, 'openspec-explore'), { recursive: true });
+      await fs.writeFile(path.join(skillsDir, 'openspec-explore', 'SKILL.md'), 'old');
+
+      await updateCommand.execute(testDir);
+
+      expect(await FileSystemUtils.fileExists(
+        path.join(skillsDir, 'openspec-explore', 'SKILL.md')
+      )).toBe(true);
+      expect(await FileSystemUtils.fileExists(
+        path.join(skillsDir, 'openspec-propose', 'SKILL.md')
+      )).toBe(false);
+    });
+
+    it('should generate project workflow artifacts by default and switch to global artifacts with --scope global', async () => {
+      setMockConfig({
+        featureFlags: {},
+        profile: 'custom',
+        delivery: 'both',
+        workflows: ['verify'],
+      });
+
+      await fs.writeFile(
+        path.join(testDir, 'openspec', 'config.yaml'),
+        `schema: spec-driven
+profile: custom
+workflows:
+  - explore
+`
+      );
+
+      const skillsDir = path.join(testDir, '.claude', 'skills');
+      const commandsDir = path.join(testDir, '.claude', 'commands', 'opsx');
+
+      await fs.mkdir(path.join(skillsDir, 'openspec-explore'), { recursive: true });
+      await fs.writeFile(path.join(skillsDir, 'openspec-explore', 'SKILL.md'), 'old');
+
+      await updateCommand.execute(testDir);
+
+      expect(await FileSystemUtils.fileExists(
+        path.join(skillsDir, 'openspec-explore', 'SKILL.md')
+      )).toBe(true);
+      expect(await FileSystemUtils.fileExists(
+        path.join(commandsDir, 'explore.md')
+      )).toBe(true);
+      expect(await FileSystemUtils.fileExists(
+        path.join(skillsDir, 'openspec-verify-change', 'SKILL.md')
+      )).toBe(false);
+      expect(await FileSystemUtils.fileExists(
+        path.join(commandsDir, 'verify.md')
+      )).toBe(false);
+
+      const globalUpdateCommand = new UpdateCommand({ scope: 'global' });
+      await globalUpdateCommand.execute(testDir);
+
+      expect(await FileSystemUtils.fileExists(
+        path.join(skillsDir, 'openspec-verify-change', 'SKILL.md')
+      )).toBe(true);
+      expect(await FileSystemUtils.fileExists(
+        path.join(commandsDir, 'verify.md')
+      )).toBe(true);
+      expect(await FileSystemUtils.fileExists(
+        path.join(skillsDir, 'openspec-explore', 'SKILL.md')
+      )).toBe(false);
+      expect(await FileSystemUtils.fileExists(
+        path.join(commandsDir, 'explore.md')
+      )).toBe(false);
+    });
+
+    it('should ignore invalid project custom settings when scope override is global', async () => {
       setMockConfig({
         featureFlags: {},
         profile: 'core',
@@ -1633,8 +1718,6 @@ workflows:
         path.join(testDir, 'openspec', 'config.yaml'),
         `schema: spec-driven
 profile: custom
-workflows:
-  - explore
 `
       );
 
@@ -1651,6 +1734,25 @@ workflows:
       expect(await FileSystemUtils.fileExists(
         path.join(skillsDir, 'openspec-apply-change', 'SKILL.md')
       )).toBe(true);
+    });
+
+    it('should fail plain update when project custom profile omits workflows', async () => {
+      setMockConfig({
+        featureFlags: {},
+        profile: 'core',
+        delivery: 'both',
+      });
+
+      await fs.writeFile(
+        path.join(testDir, 'openspec', 'config.yml'),
+        `schema: spec-driven
+profile: custom
+`
+      );
+
+      await expect(updateCommand.execute(testDir)).rejects.toThrow(
+        'Project config sets profile: custom but does not define workflows. Add workflows to your project config file, or remove the project profile override.'
+      );
     });
 
     it('should support explicit project scope with fallback for missing keys', async () => {

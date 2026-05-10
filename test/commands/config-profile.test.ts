@@ -378,6 +378,31 @@ describe('config profile interactive flow', () => {
     );
   });
 
+  it('project scope profile should fail before prompts when custom project config omits workflows', async () => {
+    const { select, checkbox, confirm } = await getPromptMocks();
+
+    fs.mkdirSync(path.join(tempDir, 'openspec'), { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, 'openspec', 'config.yaml'),
+      `schema: spec-driven
+profile: custom
+`,
+      'utf-8'
+    );
+
+    await runConfigCommand(['--scope', 'project', 'profile']);
+
+    expect(process.exitCode).toBe(1);
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Project config sets profile: custom but does not define workflows'
+      )
+    );
+    expect(select).not.toHaveBeenCalled();
+    expect(checkbox).not.toHaveBeenCalled();
+    expect(confirm).not.toHaveBeenCalled();
+  });
+
   it('changed config should save and ask apply when inside project', async () => {
     const { saveGlobalConfig, getGlobalConfig } = await import('../../src/core/global-config.js');
     const { select, confirm } = await getPromptMocks();
@@ -436,7 +461,7 @@ delivery: commands
 
     expect(parsed.profile).toBe('core');
     expect(parsed.delivery).toBe('commands');
-    expect(parsed.workflows).toEqual(['propose', 'explore', 'apply', 'archive']);
+    expect(parsed.workflows).toEqual(['propose', 'explore', 'apply', 'sync', 'archive']);
     expect(getGlobalConfig()).toMatchObject({
       profile: 'custom',
       delivery: 'skills',

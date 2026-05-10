@@ -124,6 +124,22 @@ describe('openspec CLI e2e basics', () => {
     expect(result.stderr).toContain("Unknown item 'does-not-exist'");
   });
 
+  it('fails update cleanly when both project config filenames exist', async () => {
+    const base = await fs.mkdtemp(path.join(tmpdir(), 'openspec-cli-update-'));
+    tempRoots.push(base);
+    const projectDir = path.join(base, 'project');
+    await fs.mkdir(path.join(projectDir, 'openspec'), { recursive: true });
+    await fs.writeFile(path.join(projectDir, 'openspec', 'config.yaml'), 'schema: spec-driven\n');
+    await fs.writeFile(path.join(projectDir, 'openspec', 'config.yml'), 'schema: spec-driven\n');
+
+    const result = await runCLI(['update'], { cwd: projectDir });
+
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain(
+      'Error: Both openspec/config.yaml and openspec/config.yml exist. Remove one to continue.'
+    );
+  });
+
   describe('init command non-interactive options', () => {
     it('initializes with --tools all option', async () => {
       const projectDir = await prepareFixture('tmp-init');

@@ -1,5 +1,13 @@
 # @fission-ai/openspec
 
+## Unreleased
+
+### Patch Changes
+
+- Project-scoped `profile: custom` now requires project-scoped `workflows` for profile-driven commands. OpenSpec will fail with an actionable error instead of silently inheriting a developer's global workflows, while raw `openspec config --scope project set workflows ...` remains available to repair the project config.
+
+- Project config filename resolution is now consistent across runtime reads and `openspec config --scope project` writes. OpenSpec preserves an existing `openspec/config.yml`, defaults new writes to `openspec/config.yaml`, and fails explicitly when both files exist.
+
 ## 1.3.1
 
 ### Patch Changes

@@ -11,7 +11,7 @@ describe('profile-resolution', () => {
     expect(resolved).toEqual({
       profile: 'core',
       delivery: 'both',
-      workflows: ['propose', 'explore', 'apply', 'archive'],
+      workflows: ['propose', 'explore', 'apply', 'sync', 'archive'],
       sources: {
         profile: 'default',
         delivery: 'default',
@@ -44,29 +44,22 @@ describe('profile-resolution', () => {
     });
   });
 
-  it('falls back key-by-key for partial project config', () => {
-    const resolved = resolveEffectiveProfileSettings({
-      globalConfig: {
-        featureFlags: {},
-        profile: 'custom',
-        delivery: 'commands',
-        workflows: ['new'],
-      },
-      projectConfig: {
-        profile: 'custom',
-      },
-    });
-
-    expect(resolved).toEqual({
-      profile: 'custom',
-      delivery: 'commands',
-      workflows: ['new'],
-      sources: {
-        profile: 'project',
-        delivery: 'global',
-        workflows: 'global',
-      },
-    });
+  it('requires project workflows when project config sets custom profile', () => {
+    expect(() =>
+      resolveEffectiveProfileSettings({
+        globalConfig: {
+          featureFlags: {},
+          profile: 'custom',
+          delivery: 'commands',
+          workflows: ['new'],
+        },
+        projectConfig: {
+          profile: 'custom',
+        },
+      })
+    ).toThrow(
+      'Project config sets profile: custom but does not define workflows. Add workflows to your project config file, or remove the project profile override.'
+    );
   });
 
   it('ignores project config when scope override is global', () => {
@@ -97,7 +90,7 @@ describe('profile-resolution', () => {
     });
   });
 
-  it("honors scopeOverride='project' (project wins, global fallback preserved)", () => {
+  it("honors scopeOverride='project' while preserving delivery fallback when project workflows are explicit", () => {
     const resolved = resolveEffectiveProfileSettings({
       scopeOverride: 'project',
       globalConfig: {
@@ -108,17 +101,18 @@ describe('profile-resolution', () => {
       },
       projectConfig: {
         profile: 'custom',
+        workflows: ['explore'],
       },
     });
 
     expect(resolved).toEqual({
       profile: 'custom',
       delivery: 'commands',
-      workflows: ['continue'],
+      workflows: ['explore'],
       sources: {
         profile: 'project',
         delivery: 'global',
-        workflows: 'global',
+        workflows: 'project',
       },
     });
   });
@@ -167,7 +161,7 @@ describe('profile-resolution', () => {
       },
     });
 
-    expect(resolved.workflows).toEqual(['propose', 'explore', 'apply', 'archive']);
+    expect(resolved.workflows).toEqual(['propose', 'explore', 'apply', 'sync', 'archive']);
     expect(resolved.sources.workflows).toBe('global');
   });
 });
