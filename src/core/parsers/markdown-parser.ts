@@ -20,7 +20,9 @@ export class MarkdownParser {
   }
 
   protected static normalizeContent(content: string): string {
-    return content.replace(/\r\n?/g, '\n');
+    return content
+      .replace(/\r\n?/g, '\n')
+      .replace(/^(###)(Requirement:)/gim, '$1 $2');
   }
 
   protected static buildCodeFenceMask(lines: string[]): boolean[] {

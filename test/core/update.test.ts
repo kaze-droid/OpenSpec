@@ -1462,7 +1462,7 @@ More user content after markers.
       consoleSpy.mockRestore();
     });
 
-    it('should let project profile settings override user settings by default', async () => {
+    it('should let project profile settings override global settings by default', async () => {
       setMockConfig({
         featureFlags: {},
         profile: 'core',
@@ -1547,7 +1547,7 @@ workflows:
       const scopedUpdateCommand = new UpdateCommand({ scope: 'project' });
       await scopedUpdateCommand.execute(testDir);
 
-      // Delivery falls back to user commands-only when project delivery is absent.
+      // Delivery falls back to global commands-only when project delivery is absent.
       expect(await FileSystemUtils.fileExists(
         path.join(skillsDir, 'openspec-explore', 'SKILL.md')
       )).toBe(false);
@@ -1555,71 +1555,6 @@ workflows:
       const commandsDir = path.join(testDir, '.claude', 'commands', 'opsx');
       expect(await FileSystemUtils.fileExists(path.join(commandsDir, 'explore.md'))).toBe(true);
       expect(await FileSystemUtils.fileExists(path.join(commandsDir, 'verify.md'))).toBe(false);
-    });
-
-    it('should suggest core preset when custom profile preserves the old core workflow set', async () => {
-      setMockConfig({
-        featureFlags: {},
-        profile: 'custom',
-        delivery: 'both',
-        workflows: ['propose', 'explore', 'apply', 'archive'],
-      });
-
-      const initCommand = new InitCommand({ tools: 'claude', force: true });
-      await initCommand.execute(testDir);
-
-      const consoleSpy = vi.spyOn(console, 'log');
-
-      await updateCommand.execute(testDir);
-
-      const calls = consoleSpy.mock.calls.map(call =>
-        call.map(arg => String(arg)).join(' ')
-      );
-      expect(calls.some(call =>
-        call.includes('The core profile now includes sync')
-      )).toBe(true);
-      expect(calls.some(call =>
-        call.includes('openspec config profile core') && call.includes('openspec update')
-      )).toBe(true);
-
-      expect(await FileSystemUtils.fileExists(
-        path.join(testDir, '.claude', 'skills', 'openspec-sync-specs', 'SKILL.md')
-      )).toBe(false);
-      expect(await FileSystemUtils.fileExists(
-        path.join(testDir, '.claude', 'commands', 'opsx', 'sync.md')
-      )).toBe(false);
-
-      consoleSpy.mockRestore();
-    });
-
-    it('should let project profile settings override global settings by default', async () => {
-      setMockConfig({
-        featureFlags: {},
-        profile: 'core',
-        delivery: 'both',
-      });
-
-      await fs.writeFile(
-        path.join(testDir, 'openspec', 'config.yaml'),
-        `schema: spec-driven
-profile: custom
-workflows:
-  - explore
-`
-      );
-
-      const skillsDir = path.join(testDir, '.claude', 'skills');
-      await fs.mkdir(path.join(skillsDir, 'openspec-explore'), { recursive: true });
-      await fs.writeFile(path.join(skillsDir, 'openspec-explore', 'SKILL.md'), 'old');
-
-      await updateCommand.execute(testDir);
-
-      expect(await FileSystemUtils.fileExists(
-        path.join(skillsDir, 'openspec-explore', 'SKILL.md')
-      )).toBe(true);
-      expect(await FileSystemUtils.fileExists(
-        path.join(skillsDir, 'openspec-propose', 'SKILL.md')
-      )).toBe(false);
     });
 
     it('should read project profile settings from config.yml by default', async () => {
@@ -1753,40 +1688,6 @@ profile: custom
       await expect(updateCommand.execute(testDir)).rejects.toThrow(
         'Project config sets profile: custom but does not define workflows. Add workflows to your project config file, or remove the project profile override.'
       );
-    });
-
-    it('should support explicit project scope with fallback for missing keys', async () => {
-      setMockConfig({
-        featureFlags: {},
-        profile: 'custom',
-        delivery: 'commands',
-        workflows: ['verify'],
-      });
-
-      await fs.writeFile(
-        path.join(testDir, 'openspec', 'config.yaml'),
-        `schema: spec-driven
-profile: custom
-workflows:
-  - explore
-`
-      );
-
-      const skillsDir = path.join(testDir, '.claude', 'skills');
-      await fs.mkdir(path.join(skillsDir, 'openspec-explore'), { recursive: true });
-      await fs.writeFile(path.join(skillsDir, 'openspec-explore', 'SKILL.md'), 'old');
-
-      const scopedUpdateCommand = new UpdateCommand({ scope: 'project' });
-      await scopedUpdateCommand.execute(testDir);
-
-      // Delivery falls back to global commands-only when project delivery is absent.
-      expect(await FileSystemUtils.fileExists(
-        path.join(skillsDir, 'openspec-explore', 'SKILL.md')
-      )).toBe(false);
-
-      const commandsDir = path.join(testDir, '.claude', 'commands', 'opsx');
-      expect(await FileSystemUtils.fileExists(path.join(commandsDir, 'explore.md'))).toBe(true);
-      expect(await FileSystemUtils.fileExists(path.join(commandsDir, 'verify.md'))).toBe(false);
     });
 
     it('should fail when both openspec/config.yaml and openspec/config.yml exist', async () => {

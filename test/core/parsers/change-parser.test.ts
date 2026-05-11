@@ -49,4 +49,41 @@ describe('ChangeParser', () => {
       expect(change.deltas[0].requirement).toBeDefined();
     });
   });
+
+  it('parses delta specs with no-space requirement headers', async () => {
+    await withTempDir(async (dir) => {
+      const specsDir = path.join(dir, 'specs', 'foo');
+      await fs.mkdir(specsDir, { recursive: true });
+
+      const content = `# Test Change
+
+## Why
+We need it because reasons that are sufficiently long.
+
+## What Changes
+- **foo:** Add something via bullets (should be overridden)`;
+      const deltaSpec = `# Delta for Foo
+
+## ADDED Requirements
+
+###Requirement: New thing
+The system SHALL parse no-space delta headers.
+
+#### Scenario: basic
+Given X
+When Y
+Then Z`;
+
+      await fs.writeFile(path.join(specsDir, 'spec.md'), deltaSpec, 'utf8');
+
+      const parser = new ChangeParser(content, dir);
+      const change = await parser.parseChangeWithDeltas('test-change');
+
+      expect(change.deltas).toHaveLength(1);
+      expect(change.deltas[0].spec).toBe('foo');
+      expect(change.deltas[0].operation).toBe('ADDED');
+      expect(change.deltas[0].description).toContain('Add requirement:');
+      expect(change.deltas[0].requirement?.text).toBe('The system SHALL parse no-space delta headers.');
+    });
+  });
 });

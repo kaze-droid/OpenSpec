@@ -321,6 +321,41 @@ The system SHALL do B.
       ).toBe(true);
     });
 
+    it('should error on no-space requirement headers that appear after the Requirements section ends', async () => {
+      const specContent = `# Test Specification
+
+## Purpose
+This specification validates that no-space hidden requirements are rejected too.
+
+## Requirements
+
+### Requirement: A
+The system SHALL do A.
+
+#### Scenario: A works
+- **WHEN** foo
+- **THEN** bar
+
+## Edge Cases
+
+###Requirement: B
+The system SHALL do B.
+
+#### Scenario: B works
+- **WHEN** baz
+- **THEN** qux`;
+
+      const specPath = path.join(testDir, 'spec.md');
+      await fs.writeFile(specPath, specContent);
+
+      const report = await new Validator().validateSpec(specPath);
+
+      expect(report.valid).toBe(false);
+      expect(
+        report.issues.some(i => i.level === 'ERROR' && i.message.includes('Requirement header "###Requirement: B" appears outside'))
+      ).toBe(true);
+    });
+
     it('should ignore delta header examples inside fenced code blocks', async () => {
       const specContent = `# Test Specification
 

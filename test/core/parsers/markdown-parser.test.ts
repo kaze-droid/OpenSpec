@@ -136,6 +136,30 @@ The system SHALL ...
       expect(spec.requirements[0].scenarios[0].rawText).toContain('- **WHEN** a reader reviews the documentation');
     });
 
+    it('should parse requirement headers without a space after ###', () => {
+      const content = `# Test Spec
+
+## Purpose
+This spec accepts slightly malformed requirement headers consistently.
+
+## Requirements
+
+###Requirement: NoSpace
+The system SHALL keep this requirement visible.
+
+#### Scenario: parser reads the requirement
+Given a main spec with a no-space requirement header
+When the parser reads it
+Then the requirement is preserved`;
+
+      const parser = new MarkdownParser(content);
+      const spec = parser.parseSpec('test');
+
+      expect(spec.requirements).toHaveLength(1);
+      expect(spec.requirements[0].text).toBe('The system SHALL keep this requirement visible.');
+      expect(spec.requirements[0].scenarios).toHaveLength(1);
+    });
+
     it('should not treat fence-like lines with trailing content as closing fences', () => {
       const content = `# Test Spec
 
